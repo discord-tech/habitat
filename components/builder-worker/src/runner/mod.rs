@@ -80,8 +80,10 @@ impl Job {
     pub fn vcs(&self) -> vcs::VCS {
         match self.0.get_project().get_vcs_type() {
             "git" => {
-                vcs::VCS::new(String::from(self.0.get_project().get_vcs_type()),
-                              String::from(self.0.get_project().get_vcs_data()))
+                vcs::VCS::new(
+                    String::from(self.0.get_project().get_vcs_type()),
+                    String::from(self.0.get_project().get_vcs_data()),
+                )
             }
             _ => panic!("unknown vcs associated with jobs project"),
         }
@@ -93,9 +95,13 @@ impl Job {
             .get_name()
             .split("/")
             .collect::<Vec<&str>>();
-        assert!(items.len() == 2,
-                format!("Invalid project identifier - {}",
-                        self.0.get_project().get_id()));
+        assert!(
+            items.len() == 2,
+            format!(
+                "Invalid project identifier - {}",
+                self.0.get_project().get_id()
+            )
+        );
         items[0]
     }
 }
@@ -154,45 +160,69 @@ impl Runner {
 
     pub fn run(mut self) -> Job {
         if let Some(err) = self.setup().err() {
-            error!("WORKSPACE SETUP ERR={:?}", err);
+            error!("********** WORKSPACE SETUP ERR={:?}", &err);
             return self.fail(net::err(ErrCode::WORKSPACE_SETUP, "wk:run:1"));
         }
 
         if self.config.auth_token.is_empty() {
             warn!("WARNING: No auth token specified, will likely fail fetching secret key");
-        };
+        }
 
-        match self.depot_cli
-                  .fetch_origin_secret_key(self.job().origin(), &self.config.auth_token) {
+        debug!(
+            "********** Fetching secret key from {} origin",
+            self.job().origin()
+        );
+        match self.depot_cli.fetch_origin_secret_key(
+            self.job().origin(),
+            &self.config.auth_token,
+        ) {
             Ok(key) => {
+                debug!(
+                    "********** Secret key successfully fetched from {} origin",
+                    self.job().origin()
+                );
                 let cache = crypto::default_cache_key_path(None);
                 let s: String = String::from_utf8(key.body).expect("Found invalid UTF-8");
 
+                debug!("********** Attempting to write secret key to a file");
                 match crypto::SigKeyPair::write_file_from_str(&s, &cache) {
                     Ok((pair, pair_type)) => {
-                        debug!("Imported {} origin key {}.",
-                               &pair_type,
-                               &pair.name_with_rev());
+                        debug!(
+                            "********** Imported {} origin key {}.",
+                            &pair_type,
+                            &pair.name_with_rev()
+                        );
                     }
                     Err(err) => {
-                        error!("Unable to import secret key, err={}", err);
+                        error!("********** Unable to import secret key, err={:?}", &err);
                         return self.fail(net::err(ErrCode::SECRET_KEY_IMPORT, "wk:run:2"));
                     }
                 }
             }
             Err(err) => {
-                error!("Unable to retrieve secret key, err={}", err);
+                error!("********** Unable to retrieve secret key, err={:?}", &err);
                 return self.fail(net::err(ErrCode::SECRET_KEY_FETCH, "wk:run:3"));
             }
         }
+
+        debug!(
+            "********** Attempting to clone the {:?} repo into {:?}",
+            &self.job().vcs().data,
+            &self.workspace.src()
+        );
         if let Some(err) = self.job().vcs().clone(&self.workspace.src()).err() {
-            error!("Unable to clone remote source repository, err={}", err);
+            error!(
+                "********** Unable to clone remote source repository, err={:?}",
+                &err
+            );
             return self.fail(net::err(ErrCode::VCS_CLONE, "wk:run:4"));
         }
 
-        self.workspace
-            .job
-            .set_build_started_at(UTC::now().to_rfc3339());
+        self.workspace.job.set_build_started_at(
+            UTC::now().to_rfc3339(),
+        );
+
+        self.workspace.job.set_state(JobState::Processing);
 
         // TODO: We don't actually update the state of the job to
         // "Processing" (that should happen here), so an outside
@@ -202,16 +232,16 @@ impl Runner {
         // finished.
         let mut archive = match self.build() {
             Ok(archive) => {
-                self.workspace
-                    .job
-                    .set_build_finished_at(UTC::now().to_rfc3339());
+                self.workspace.job.set_build_finished_at(
+                    UTC::now().to_rfc3339(),
+                );
                 archive
             }
             Err(err) => {
-                self.workspace
-                    .job
-                    .set_build_finished_at(UTC::now().to_rfc3339());
-                error!("Unable to build in studio, err={}", err);
+                self.workspace.job.set_build_finished_at(
+                    UTC::now().to_rfc3339(),
+                );
+                error!("********** Unable to build in studio, err={:?}", &err);
                 return self.fail(net::err(ErrCode::BUILD, "wk:run:5"));
             }
         };
@@ -238,26 +268,33 @@ impl Runner {
         }
 
         if let Some(err) = fs::remove_dir_all(self.workspace.out()).err() {
-            error!("unable to remove out directory ({}), ERR={:?}",
-                   self.workspace.out().display(),
-                   err)
+            error!(
+                "********** unable to remove out directory ({}), ERR={:?}",
+                self.workspace.out().display(),
+                err
+            )
         }
         self.complete()
     }
 
     fn build(&mut self) -> Result<PackageArchive> {
-        let args = vec![OsString::from("-s"), // source path
-                        OsString::from(self.workspace.src()),
-                        OsString::from("-r"), // hab studio root
-                        OsString::from(self.workspace.studio()),
-                        OsString::from("-k"), // origin keys to use
-                        OsString::from(self.job().origin()),
-                        OsString::from("build"),
-                        OsString::from(Path::new(self.job().get_project().get_plan_path())
-                                           .parent()
-                                           .unwrap())];
+        let args = vec![
+            OsString::from("-s"), // source path
+            OsString::from(self.workspace.src()),
+            OsString::from("-r"), // hab studio root
+            OsString::from(self.workspace.studio()),
+            OsString::from("-k"), // origin keys to use
+            OsString::from(self.job().origin()),
+            OsString::from("build"),
+            OsString::from(
+                Path::new(self.job().get_project().get_plan_path())
+                    .parent()
+                    .unwrap()
+            ),
+        ];
+
         let command = studio_cmd();
-        debug!("building, cmd={:?}, args={:?}", command, args);
+        debug!("********** building, cmd={:?}, args={:?}", &command, &args);
         let mut child = match env::var(RUNNER_DEBUG_ENV) {
             Ok(val) => {
                 Command::new(command)
@@ -286,9 +323,13 @@ impl Runner {
         };
         self.log_pipe().pipe(&mut child);
         let exit_status = child.wait().expect("failed to wait on child");
-        debug!("build complete, status={:?}", exit_status);
+        debug!("********** build complete, status={:?}", &exit_status);
+
         if exit_status.success() {
-            try!(fs::rename(self.workspace.src().join("results"), self.workspace.out()));
+            try!(fs::rename(
+                self.workspace.src().join("results"),
+                self.workspace.out(),
+            ));
             self.workspace.last_built()
         } else {
             Err(Error::BuildFailure(exit_status.code().unwrap_or(-1)))
@@ -314,26 +355,37 @@ impl Runner {
         self.logger.log_worker_job(&self.workspace.job);
 
         if let Some(err) = fs::remove_dir_all(self.workspace.src()).err() {
-            error!("unable to remove out directory ({}), ERR={:?}",
-                   self.workspace.out().display(),
-                   err)
+            error!(
+                "********** unable to remove out directory ({}), ERR={:?}",
+                self.workspace.out().display(),
+                err
+            )
         }
         if let Some(err) = fs::create_dir_all(self.workspace.src()).err() {
-            return Err(Error::WorkspaceSetup(format!("{}", self.workspace.src().display()), err));
+            return Err(Error::WorkspaceSetup(
+                format!("{}", self.workspace.src().display()),
+                err,
+            ));
         }
         self.log_pipe = Some(LogPipe::new(&self.workspace));
         Ok(())
     }
 
     fn teardown(&mut self) -> Result<()> {
-        let args = vec![OsString::from("-s"), // source path
-                        OsString::from(self.workspace.src()),
-                        OsString::from("-r"), // hab studio root
-                        OsString::from(self.workspace.studio()),
-                        OsString::from("rm")];
+        let args = vec![
+            OsString::from("-s"), // source path
+            OsString::from(self.workspace.src()),
+            OsString::from("-r"), // hab studio root
+            OsString::from(self.workspace.studio()),
+            OsString::from("rm"),
+        ];
 
         let command = studio_cmd();
-        debug!("removing studio, cmd={:?}, args={:?}", command, args);
+        debug!(
+            "********** removing studio, cmd={:?}, args={:?}",
+            command,
+            args
+        );
         let mut child = match env::var(RUNNER_DEBUG_ENV) {
             Ok(val) => {
                 Command::new(command)
@@ -354,11 +406,16 @@ impl Runner {
             }
         };
         let exit_status = child.wait().expect("failed to wait on child");
-        debug!("studio removal complete, status={:?}", exit_status);
+        debug!(
+            "********** studio removal complete, status={:?}",
+            exit_status
+        );
         if exit_status.success() {
             if let Some(err) = fs::remove_dir_all(self.workspace.src()).err() {
-                return Err(Error::WorkspaceTeardown(format!("{}", self.workspace.src().display()),
-                                                    err));
+                return Err(Error::WorkspaceTeardown(
+                    format!("{}", self.workspace.src().display()),
+                    err,
+                ));
             }
             Ok(())
         } else {
@@ -438,9 +495,9 @@ impl RunnerMgr {
         let handle = thread::Builder::new()
             .name("runner".to_string())
             .spawn(move || {
-                       let mut runner = Self::new(config).unwrap();
-                       runner.run(tx).unwrap();
-                   })
+                let mut runner = Self::new(config).unwrap();
+                runner.run(tx).unwrap();
+            })
             .unwrap();
         match rx.recv() {
             Ok(()) => Ok(handle),
@@ -451,10 +508,10 @@ impl RunnerMgr {
     fn new(config: Arc<RwLock<Config>>) -> Result<Self> {
         let sock = try!((**ZMQ_CONTEXT).as_mut().socket(zmq::DEALER));
         Ok(RunnerMgr {
-               sock: sock,
-               msg: zmq::Message::new().unwrap(),
-               config: config,
-           })
+            sock: sock,
+            msg: zmq::Message::new().unwrap(),
+            config: config,
+        })
     }
 
     // Main loop for server
@@ -472,7 +529,7 @@ impl RunnerMgr {
         let runner = {
             Runner::new(job, (*self.config.read().unwrap()).clone())
         };
-        debug!("executing work, job={:?}", runner.job());
+        debug!("********** executing work, job={:?}", runner.job());
         let job = runner.run();
         self.send_complete(&job)
     }
@@ -484,14 +541,14 @@ impl RunnerMgr {
     }
 
     fn send_ack(&mut self, job: &Job) -> Result<()> {
-        debug!("received work, job={:?}", job);
+        debug!("********** received work, job={:?}", job);
         try!(self.sock.send_str(WORK_ACK, zmq::SNDMORE));
         try!(self.sock.send(&*job.write_to_bytes().unwrap(), 0));
         Ok(())
     }
 
     fn send_complete(&mut self, job: &Job) -> Result<()> {
-        debug!("work complete, job={:?}", job);
+        debug!("********** work complete, job={:?}", job);
         try!(self.sock.send_str(WORK_COMPLETE, zmq::SNDMORE));
         try!(self.sock.send(&*job.write_to_bytes().unwrap(), 0));
         Ok(())
@@ -502,8 +559,10 @@ fn studio_cmd() -> String {
     match PackageInstall::load(&STUDIO_PKG, None) {
         Ok(package) => format!("{}/hab-studio", package.paths().unwrap()[0].display()),
         Err(_) => {
-            panic!("core/hab-studio not found! This should be available as it is a runtime \
-                    dependency in the worker's plan.sh and also present in our dev Dockerfile")
+            panic!(
+                "core/hab-studio not found! This should be available as it is a runtime \
+                    dependency in the worker's plan.sh and also present in our dev Dockerfile"
+            )
         }
     }
 }

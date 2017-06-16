@@ -118,7 +118,7 @@ impl error::Error for Error {
             Error::NetError(ref err) => err.description(),
             Error::ProtoNetError(ref err) => err.description(),
             Error::Protobuf(ref err) => err.description(),
-            Error::UnknownGroup => "Unknown Group",            
+            Error::UnknownGroup => "Unknown Group",
             Error::UnknownGroupState => "Unknown Group State",
             Error::UnknownProjectState => "Unknown Project State",
             Error::UnknownJobState => "Unknown Job State",

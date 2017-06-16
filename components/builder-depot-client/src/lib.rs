@@ -549,12 +549,10 @@ impl Client {
             Some(filename) => format!("{}", filename),
             None => return Err(Error::NoXFilename),
         };
-        let tmp_file_path = dst_path.join(format!("{}.tmp-{}",
-                                                  file_name,
-                                                  thread_rng()
-                                                      .gen_ascii_chars()
-                                                      .take(8)
-                                                      .collect::<String>()));
+        let tmp_file_path =
+            dst_path.join(format!("{}.tmp-{}",
+                                  file_name,
+                                  thread_rng().gen_ascii_chars().take(8).collect::<String>()));
         let dst_file_path = dst_path.join(file_name);
         debug!("Writing to {}", &tmp_file_path.display());
         let mut f = try!(File::create(&tmp_file_path));

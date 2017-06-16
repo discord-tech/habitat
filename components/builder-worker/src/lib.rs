@@ -28,7 +28,6 @@ extern crate serde;
 extern crate serde_derive;
 extern crate toml;
 extern crate zmq;
-extern crate habitat_builder_protocol;
 extern crate builder_core as bldr_core;
 
 pub mod config;
