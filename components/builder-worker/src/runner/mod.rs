@@ -15,6 +15,7 @@
 pub mod log_pipe;
 pub mod workspace;
 pub mod postprocessor;
+pub mod logger;
 
 use std::path::PathBuf;
 use std::ffi::OsString;
@@ -43,6 +44,7 @@ use zmq;
 
 use {PRODUCT, VERSION};
 use self::log_pipe::LogPipe;
+use self::logger::Logger as LogFile;
 use self::postprocessor::PostProcessor;
 use self::workspace::Workspace;
 use config::Config;
@@ -124,6 +126,7 @@ pub struct Runner {
     config: Config,
     depot_cli: depot_client::Client,
     log_pipe: Option<LogPipe>,
+    log_file: Option<LogFile>,
     workspace: Workspace,
     logger: Logger,
 }
@@ -142,6 +145,7 @@ impl Runner {
             config: config,
             depot_cli: depot_cli,
             log_pipe: None,
+            log_file: None,
             logger: logger,
         }
     }
@@ -152,6 +156,10 @@ impl Runner {
 
     pub fn job_mut(&mut self) -> &mut Job {
         &mut self.workspace.job
+    }
+
+    pub fn log_file(&mut self) -> &mut LogFile {
+        self.log_file.as_mut().expect("LogFile not initialized")
     }
 
     pub fn log_pipe(&mut self) -> &mut LogPipe {
@@ -321,6 +329,7 @@ impl Runner {
                     .expect("failed to spawn child")
             }
         };
+        self.log_file().pipe(&mut child);
         self.log_pipe().pipe(&mut child);
         let exit_status = child.wait().expect("failed to wait on child");
         debug!("********** build complete, status={:?}", &exit_status);
@@ -361,13 +370,17 @@ impl Runner {
                 err
             )
         }
+
         if let Some(err) = fs::create_dir_all(self.workspace.src()).err() {
             return Err(Error::WorkspaceSetup(
                 format!("{}", self.workspace.src().display()),
                 err,
             ));
         }
+
+        self.log_file = Some(LogFile::init(&self.workspace));
         self.log_pipe = Some(LogPipe::new(&self.workspace));
+
         Ok(())
     }
 
@@ -393,6 +406,8 @@ impl Runner {
                     .env_clear()
                     .env("HAB_NONINTERACTIVE", "true")
                     .env("DEBUG", val)
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
                     .spawn()
                     .expect("failed to spawn child")
             }
@@ -401,10 +416,14 @@ impl Runner {
                     .args(&args)
                     .env_clear()
                     .env("HAB_NONINTERACTIVE", "true")
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
                     .spawn()
                     .expect("failed to spawn child")
             }
         };
+        self.log_file().pipe(&mut child);
+
         let exit_status = child.wait().expect("failed to wait on child");
         debug!(
             "********** studio removal complete, status={:?}",

@@ -1,5 +1,5 @@
 postgres: support/db/start.sh
-api: target/debug/bldr-api start --path /tmp/depot --config /root/habitat/tmp/config_api.toml
+api: target/debug/bldr-api start --path /root/habitat/tmp/depot --config /root/habitat/tmp/config_api.toml
 admin: target/debug/bldr-admin start
 router: target/debug/bldr-router start
 jobsrv: target/debug/bldr-job-srv start --config /root/habitat/tmp/config_jobsrv.toml
