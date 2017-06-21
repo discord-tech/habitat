@@ -20,6 +20,8 @@ extern crate protobuf;
 pub mod error;
 mod client;
 
+pub use protocol::{ERR_NO_RETRY_EXCODE, OK_NO_RETRY_EXCODE};
+
 pub use client::LauncherCli;
 pub use error::Error;
 use error::Result;

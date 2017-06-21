@@ -28,7 +28,7 @@ use core::os::process::Signal;
 use core::os::signals::{self, SignalEvent};
 use ipc_channel::ipc::{IpcOneShotServer, IpcReceiver, IpcSender};
 use protobuf;
-use protocol;
+use protocol::{self, ERR_NO_RETRY_EXCODE, OK_NO_RETRY_EXCODE};
 
 use self::handlers::Handler;
 use {SUP_CMD, SUP_PACKAGE_IDENT};
@@ -103,6 +103,11 @@ impl Server {
                     Ok(None) => Ok(()),
                     Ok(Some(status)) => {
                         debug!("Supervisor exited: {}", status);
+                        match status.code() {
+                            Some(ERR_NO_RETRY_EXCODE) => process::exit(ERR_NO_RETRY_EXCODE),
+                            Some(OK_NO_RETRY_EXCODE) => process::exit(0),
+                            _ => (),
+                        }
                         Err(Error::SupShutdown)
                     }
                     Err(err) => {
@@ -133,6 +138,7 @@ impl Server {
         self.supervisor.wait().ok();
         self.services.kill_all();
         outputln!("Hasta la vista, services.");
+        // JW TODO: I can't exit here - destructors won't run. Move this to main.rs
         process::exit(0);
     }
 }

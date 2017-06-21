@@ -15,6 +15,7 @@
 extern crate habitat_common as common;
 #[macro_use]
 extern crate habitat_core as hcore;
+extern crate habitat_launcher_client as launcher_client;
 #[macro_use]
 extern crate habitat_sup as sup;
 extern crate log;
@@ -28,6 +29,7 @@ extern crate url;
 
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::path::{Path, PathBuf};
+use std::process;
 use std::result;
 use std::str::FromStr;
 
@@ -38,6 +40,7 @@ use hcore::env as henv;
 use hcore::crypto::{self, default_cache_key_path, SymKey};
 use hcore::package::{PackageArchive, PackageIdent};
 use hcore::url::{DEFAULT_DEPOT_URL, DEPOT_URL_ENVVAR};
+use launcher_client::{ERR_NO_RETRY_EXCODE, OK_NO_RETRY_EXCODE};
 use url::Url;
 
 use sup::VERSION;
@@ -59,9 +62,12 @@ static RING_KEY_ENVVAR: &'static str = "HAB_RING_KEY";
 
 fn main() {
     boot();
-    if let Err(e) = start() {
-        println!("{}", e);
-        std::process::exit(1);
+    if let Err(err) = start() {
+        println!("{}", err);
+        match err {
+            SupError { err: Error::ProcessLocked(_), .. } => process::exit(ERR_NO_RETRY_EXCODE),
+            _ => process::exit(1),
+        }
     }
 }
 
@@ -330,7 +336,7 @@ fn sub_start(m: &ArgMatches) -> Result<()> {
                             let mut manager = Manager::load(cfg)?;
                             return manager.run();
                         } else {
-                            return Ok(());
+                            process::exit(OK_NO_RETRY_EXCODE);
                         }
                     }
                 }
@@ -345,17 +351,12 @@ fn sub_start(m: &ArgMatches) -> Result<()> {
     };
 
     let running = Manager::is_running(&cfg)?;
+    command::start::run(cfg.clone(), maybe_spec.clone(), maybe_local_artifact)?;
 
-    try!(command::start::run(
-        cfg.clone(),
-        maybe_spec.clone(),
-        maybe_local_artifact,
-    ));
     if running {
         if let Some(spec) = maybe_spec {
             outputln!(
-                "The supervisor is starting the {} service. See the supervisor output for \
-                      more details.",
+                "Supervisor starting {}. See the Supervisor output for more details.",
                 spec.ident
             );
         }
@@ -373,7 +374,7 @@ fn sub_status(m: &ArgMatches) -> Result<()> {
     let cfg = mgrcfg_from_matches(m)?;
     if !Manager::is_running(&cfg)? {
         println!("The supervisor is not running.");
-        std::process::exit(3);
+        process::exit(3);
     }
     match m.value_of("PKG_IDENT") {
         Some(pkg) => {
@@ -381,7 +382,7 @@ fn sub_status(m: &ArgMatches) -> Result<()> {
                 Ok(status) => outputln!("{}", status),
                 Err(_) => {
                     println!("{} is not currently loaded.", pkg);
-                    std::process::exit(2);
+                    process::exit(2);
                 }
             }
         }
