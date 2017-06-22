@@ -15,7 +15,9 @@
 use hab_net::server::ZMQ_CONTEXT;
 use protobuf::Message;
 use protocol::jobsrv::{JobLogComplete, JobLogChunk};
-use std::io::{BufRead, BufReader};
+use std;
+use std::fs::{File, OpenOptions};
+use std::io::{BufRead, BufReader, Write};
 use std::process;
 use super::workspace::Workspace;
 use zmq;
@@ -54,16 +56,34 @@ impl LogPipe {
     /// any).
     pub fn pipe(&mut self, process: &mut process::Child) {
         let mut line_count = 0;
+        // let file = match OpenOptions::new()
+        //     .create(true)
+        //     .read(true)
+        //     .append(true)
+        //     .open("/tmp/josh.log") {
+        //     Ok(f) => f,
+        //     Err(e) => panic!("CANT OPEN A FILE OMG, {:?}", e),
+        // };
 
         if let Some(ref mut stdout) = process.stdout {
             let reader = BufReader::new(stdout);
             line_count = self.stream_lines(reader, line_count);
         }
+        // writeln!(&file, "Just finished sending stdout to jobsrv");
+        // writeln!(
+        //     &mut std::io::stderr(),
+        //     "Just finished sending stdout to jobsrv"
+        // );
         if let Some(ref mut stderr) = process.stderr {
             let reader = BufReader::new(stderr);
             // not capturing line_count output because we don't use it
             self.stream_lines(reader, line_count);
         }
+        // writeln!(&file, "Just finished sending stderr to jobsrv");
+        // writeln!(
+        //     &mut std::io::stderr(),
+        //     "Just finished sending stderr to jobsrv"
+        // );
 
         // Signal that the log is finished
         let mut complete = JobLogComplete::new();
@@ -72,6 +92,11 @@ impl LogPipe {
         self.sock
             .send(complete.write_to_bytes().unwrap().as_slice(), 0)
             .unwrap();
+        // writeln!(&file, "Just signalled to jobsrv that the job is complete");
+        // writeln!(
+        //     &mut std::io::stderr(),
+        //     "Just signalled to jobsrv that the job is complete"
+        // );
     }
 
     /// Send the lines of the reader out over the ZMQ socket as
@@ -88,10 +113,26 @@ impl LogPipe {
     /// implementation, but it defeated me :( This seems passable in
     /// the meantime.)
     fn stream_lines<B: BufRead>(&mut self, reader: B, mut line_num: u64) -> u64 {
+        // let file = match OpenOptions::new()
+        //     .create(true)
+        //     .read(true)
+        //     .append(true)
+        //     .open("/tmp/josh.log") {
+        //     Ok(f) => f,
+        //     Err(e) => panic!("CANT OPEN A FILE OMG, {:?}", e),
+        // };
+
         for line in reader.lines() {
             line_num = line_num + 1;
             let mut l: String = line.unwrap();
             l = l + EOL_MARKER;
+
+            // writeln!(&file, "Sending |{}| to log forwarder", l.clone());
+            // writeln!(
+            //     &mut std::io::stderr(),
+            //     "Sending |{}| to log forwarder",
+            //     l.clone()
+            // );
 
             let mut chunk = JobLogChunk::new();
             chunk.set_job_id(self.job_id);

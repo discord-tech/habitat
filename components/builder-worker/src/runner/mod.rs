@@ -329,7 +329,7 @@ impl Runner {
                     .expect("failed to spawn child")
             }
         };
-        self.log_file().pipe(&mut child);
+        // self.log_file().pipe(&mut child);
         self.log_pipe().pipe(&mut child);
         let exit_status = child.wait().expect("failed to wait on child");
         debug!("********** build complete, status={:?}", &exit_status);
@@ -378,7 +378,7 @@ impl Runner {
             ));
         }
 
-        self.log_file = Some(LogFile::init(&self.workspace));
+        // self.log_file = Some(LogFile::init(&self.workspace));
         self.log_pipe = Some(LogPipe::new(&self.workspace));
 
         Ok(())
@@ -422,7 +422,7 @@ impl Runner {
                     .expect("failed to spawn child")
             }
         };
-        self.log_file().pipe(&mut child);
+        // self.log_file().pipe(&mut child);
 
         let exit_status = child.wait().expect("failed to wait on child");
         debug!(
