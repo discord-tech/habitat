@@ -141,7 +141,7 @@ impl BoxKeyPair {
         match all.len() {
             0 => {
                 let msg = format!("No revisions found for {} box key", name.as_ref());
-                return Err(Error::CryptoError(msg));
+                Err(Error::CryptoError(msg))
             }
             _ => Ok(all.remove(0)),
         }
@@ -287,6 +287,7 @@ impl BoxKeyPair {
                 ));
             }
         };
+
         if version == ANONYMOUS_BOX_FORMAT_VERSION {
             Self::decrypt_anonymous_box(&ciphertext, sender.public()?, sender.secret()?)
         } else {
@@ -306,9 +307,9 @@ impl BoxKeyPair {
         sk: &BoxSecretKey,
     ) -> Result<Vec<u8>> {
         box_::open(ciphertext, nonce, pk, sk).map_err(|_| {
-            Error::CryptoError(format!(
-                "Secret key, public key, and nonce could not decrypt ciphertext"
-            ))
+            Error::CryptoError(
+                "Secret key, public key, and nonce could not decrypt ciphertext".to_owned(),
+            )
         })
     }
 
@@ -317,10 +318,10 @@ impl BoxKeyPair {
         pk: &BoxPublicKey,
         sk: &BoxSecretKey,
     ) -> Result<Vec<u8>> {
-        sealedbox::open(ciphertext, &pk, &sk).map_err(|_| {
-            Error::CryptoError(format!(
-                "Secret key and public key could not decrypt ciphertext"
-            ))
+        sealedbox::open(ciphertext, pk, sk).map_err(|_| {
+            Error::CryptoError(
+                "Secret key and public key could not decrypt ciphertext".to_owned(),
+            )
         })
     }
 
@@ -336,8 +337,8 @@ impl BoxKeyPair {
         debug!("secret box keyfile = {}", secret_keyfile.display());
 
         write_keypair_files(
-            KeyType::Box,
-            &name_with_rev,
+            &KeyType::Box,
+            name_with_rev,
             Some(&public_keyfile),
             Some(&base64::encode(&pk[..]).into_bytes()),
             Some(&secret_keyfile),
@@ -357,7 +358,7 @@ impl BoxKeyPair {
         match BoxPublicKey::from_slice(&bytes) {
             Some(sk) => Ok(sk),
             None => {
-                return Err(Error::CryptoError(format!(
+                Err(Error::CryptoError(format!(
                     "Can't read box public key for {}",
                     key_with_rev.as_ref()
                 )))
@@ -376,7 +377,7 @@ impl BoxKeyPair {
         match BoxSecretKey::from_slice(&bytes) {
             Some(sk) => Ok(sk),
             None => {
-                return Err(Error::CryptoError(format!(
+                Err(Error::CryptoError(format!(
                     "Can't read box secret key for {}",
                     key_with_rev.as_ref()
                 )))
